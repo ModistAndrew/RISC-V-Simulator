@@ -3,5 +3,4 @@ project(risc_v)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(risc_v src/main.cpp
-        src/processor.cpp)
+add_executable(risc_v src/main.cpp)

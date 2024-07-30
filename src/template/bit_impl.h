@@ -65,7 +65,7 @@ constexpr void Bit<_Nm>::set(const _Tp &val) {
 	this->_M_range_check<_Hi, _Lo>();
 	auto data = static_cast<max_size_t>(val);
 	constexpr auto _Length = _Hi - _Lo + 1;
-	auto mask = make_mask<_Length> << _Lo;
+	auto mask = make_mask<_Length>() << _Lo;
 	this->_M_data = (this->_M_data & ~mask) | ((data << _Lo) & mask);
 }
 

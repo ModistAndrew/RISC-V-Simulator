@@ -17,7 +17,7 @@ private:
 
 	[[no_unique_address]]
 	debug::DebugValue<bool, false> _M_assigned;
-
+public:
 	void sync() {
 		this->_M_assigned = false;
 		this->_M_old = this->_M_new;
@@ -34,7 +34,7 @@ public:
 	Register &operator=(const Register &rhs) = delete;
 
 	template<concepts::bit_convertible<_Len> _Tp>
-	void operator<=(const _Tp &value) {
+	void assign(const _Tp &value) {
 		debug::assert(!this->_M_assigned, "Register is double assigned in this cycle.");
 		this->_M_assigned = true;
 		this->_M_new = static_cast<max_size_t>(value);
