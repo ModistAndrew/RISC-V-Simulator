@@ -2,7 +2,6 @@
 #include "template/cpu.h"
 
 int main() {
-  freopen("../testcases/pi.data", "r", stdin);
   init();
   load_instructions();
   dark::CPU cpu;
