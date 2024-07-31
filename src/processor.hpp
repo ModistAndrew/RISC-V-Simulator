@@ -53,6 +53,9 @@ enum MemoryAccessMode {
 };
 
 Word read_data(unsigned int addr, MemoryAccessMode mode = WORD) {
+  if (addr >= MEMORY_SIZE) {
+    return 0; // must be an invalid address not to be committed
+  }
   if (mode == BYTE || mode == BYTE_UNSIGNED) {
     Bit<8> ret;
     ret.set<7, 0>(memory[addr]);
@@ -73,6 +76,9 @@ Word read_data(unsigned int addr, MemoryAccessMode mode = WORD) {
 }
 
 void store_data(unsigned int addr, const Word &data, MemoryAccessMode mode = WORD) {
+  if (addr >= MEMORY_SIZE) {
+    return; // must be an invalid address not to be committed
+  }
   memory[addr] = to_unsigned(data.range<7, 0>());
   if (mode == BYTE || mode == BYTE_UNSIGNED) {
     return;
@@ -99,7 +105,7 @@ struct ProcessorOutput {
 struct RegisterFile {
   Data data;
   InstPos pending_inst;
-  Flag pending; // for register 0, data is always 0 and pending is always false
+  Flag pending; // for register 0, data is always 0 and pending is always false.
 };
 
 enum Op {
@@ -344,8 +350,8 @@ struct Instruction {
   std::array<PendingData, 2> pending_data;
   Data immediate; // we always store immediate as signed integer
   RegPos destination;
-  Data result; // for branch, result stores where to jump
-  Flag predict; // whether to jump when not ready; whether prediction is correct when ready
+  Data result; // for branch, result stores whether to jump
+  Flag predict; // whether to jump when not ready
   Data pc; // pc of this instruction
   Flag terminate; // for halt instruction
 };
@@ -356,7 +362,7 @@ struct ProcessorData {
   std::array<Instruction, INSTRUCTION_BUFFER_SIZE> instruction_buffer;
   InstPos head, tail;
   Flag flushing;
-  Flag halt;
+  Flag committing;
 };
 
 // TODO: split out IQ, RS, RoB, SLB, etc. as separate modules and pass data between them through wires
@@ -485,18 +491,21 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     Instruction &inst = instruction_buffer[inst_pos];
     Op op = static_cast<Op>(to_unsigned(inst.opcode));
     if (is_branch(op)) {
-      if (inst.predict == false) {
-        pc.assign(inst.result);
+      if (inst.result != inst.predict) {
+        pc.assign(inst.pc + (inst.result ? to_signed(inst.immediate) : 4));
         flushing.assign(true);
       }
     } else if (is_store(op)) {
       store_data(to_unsigned(inst.pending_data[0].data + inst.immediate), inst.pending_data[1].data,
                  get_memory_access_mode(op));
     } else {
-      RegisterFile &rf = register_files[to_unsigned(inst.destination)];
-      rf.data.assign(inst.result);
-      if (rf.pending == true && rf.pending_inst == inst_pos) {
-        rf.pending.assign(false);
+      auto reg_pos = to_unsigned(inst.destination);
+      if (reg_pos) {
+        RegisterFile &rf = register_files[reg_pos];
+        rf.data.assign(inst.result);
+        if (rf.pending == true && rf.pending_inst == inst_pos) {
+          rf.pending.assign(false);
+        }
       }
     }
     if (op == JALR) {
@@ -504,7 +513,8 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
       flushing.assign(true);
     }
     if (inst.terminate == true) {
-      halt.assign(true);
+      should_return.assign(true);
+      return_value.assign(to_signed(register_files[10].data));
     }
   }
 
@@ -569,22 +579,22 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
         inst.result.assign(pc + 4);
         break;
       case BEQ:
-        inst.result.assign(rs1 == rs2 ? pc + imm : pc + 4);
+        inst.result.assign(rs1 == rs2);
         break;
       case BNE:
-        inst.result.assign(rs1 != rs2 ? pc + imm : pc + 4);
+        inst.result.assign(rs1 != rs2);
         break;
       case BLT:
-        inst.result.assign(rs1 < rs2 ? pc + imm : pc + 4);
+        inst.result.assign(rs1 < rs2);
         break;
       case BGE:
-        inst.result.assign(rs1 >= rs2 ? pc + imm : pc + 4);
+        inst.result.assign(rs1 >= rs2);
         break;
       case BLTU:
-        inst.result.assign(static_cast<unsigned int>(rs1) < static_cast<unsigned int>(rs2) ? pc + imm : pc + 4);
+        inst.result.assign(static_cast<unsigned int>(rs1) < static_cast<unsigned int>(rs2));
         break;
       case BGEU:
-        inst.result.assign(static_cast<unsigned int>(rs1) >= static_cast<unsigned int>(rs2) ? pc + imm : pc + 4);
+        inst.result.assign(static_cast<unsigned int>(rs1) >= static_cast<unsigned int>(rs2));
         break;
       case LB:
       case LH:
@@ -661,32 +671,30 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
 
   void work()
   override {
-    if (halt == true) {
-      should_return.assign(true);
-      return_value.assign(to_signed(register_files[10].data));
-      return;
-    }
     if (flushing == true) {
       flush();
       return;
     }
+    committing.assign(!committing);
     for (unsigned int i = 0; i < INSTRUCTION_BUFFER_SIZE; i++) {
       Instruction &inst = instruction_buffer[i];
       if (i == tail) {
-        if (inst.valid == false) {
+        if (inst.valid == false && committing == false) {
           fetch(i);
           tail.assign(tail + 1);
           inst.valid.assign(true);
         }
-      } else if (i == head) {
-        if (inst.valid == true && inst.ready == true) {
-          commit(i);
-          head.assign(head + 1);
-          inst.valid.assign(false);
-        }
       } else {
-        if (inst.valid == true && inst.ready == false) {
-          execute(i);
+        if (inst.valid == true) {
+          if (i == head && inst.ready == true) {
+            if (committing == true) {
+              commit(i);
+              head.assign(head + 1);
+              inst.valid.assign(false);
+            }
+          } else if (inst.ready == false) {
+            execute(i);
+          }
         }
       }
     }
