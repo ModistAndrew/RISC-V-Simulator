@@ -2,8 +2,8 @@
 #include "template/cpu.h"
 
 int main() {
-  init();
-  load_instructions();
+  freopen("../testcases/magic.data", "r", stdin);
+  memory::load_instructions();
   dark::CPU cpu;
   ProcessorModule processor;
   cpu.add_module(&processor);

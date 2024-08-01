@@ -4,92 +4,10 @@
 
 #ifndef RISC_V_PROCESSOR_HPP
 #define RISC_V_PROCESSOR_HPP
+#define _DEBUG
 
-#include <cstddef>
-#include <string>
-#include <iostream>
-#include "template/module.h"
-#include "template/register.h"
-#include "template/bit.h"
-#include "template/bit_impl.h"
-#include "template/operator.h"
-#include "template/tools.h"
-
-constexpr unsigned int REGISTER_NUM = 1 << 5;
-constexpr unsigned int INSTRUCTION_BUFFER_SIZE = 1 << 4;
-constexpr unsigned int MEMORY_SIZE = 1 << 30;
-constexpr unsigned int OPCODE_COUNT = 1 << 7;
-using dark::Register, dark::Bit;
-using InstPos = Register<4>; // a position in instruction buffer.
-using Opcode = Register<7>;
-using Data = Register<32>; // data or memory address
-using RegPos = Register<5>;
-using Flag = Register<1>;
-using Return = Register<8>;
-using Word = Bit<32>;
-
-std::array<unsigned char, MEMORY_SIZE> memory;
-
-// Load instructions from input stream into our memory.
-void load_instructions() {
-  unsigned int current_pos = 0;
-  std::string str;
-  while (std::cin >> str) {
-    if (str[0] == '@') {
-      current_pos = std::stoul(str.substr(1), nullptr, 16);
-    } else {
-      memory[current_pos] = std::stoul(str, nullptr, 16);
-      current_pos++;
-    }
-  }
-}
-
-enum MemoryAccessMode {
-  BYTE,
-  BYTE_UNSIGNED,
-  HALF_WORD,
-  HALF_WORD_UNSIGNED,
-  WORD
-};
-
-Word read_data(unsigned int addr, MemoryAccessMode mode = WORD) {
-  if (addr >= MEMORY_SIZE) {
-    return 0; // must be an invalid address not to be committed
-  }
-  if (mode == BYTE || mode == BYTE_UNSIGNED) {
-    Bit<8> ret;
-    ret.set<7, 0>(memory[addr]);
-    return mode == BYTE ? to_signed(ret) : to_unsigned(ret);
-  }
-  if (mode == HALF_WORD || mode == HALF_WORD_UNSIGNED) {
-    Bit<16> ret;
-    ret.set<7, 0>(memory[addr]);
-    ret.set<15, 8>(memory[addr + 1]);
-    return mode == HALF_WORD ? to_signed(ret) : to_unsigned(ret);
-  }
-  Word ret;
-  ret.set<7, 0>(memory[addr]);
-  ret.set<15, 8>(memory[addr + 1]);
-  ret.set<23, 16>(memory[addr + 2]);
-  ret.set<31, 24>(memory[addr + 3]);
-  return ret;
-}
-
-void store_data(unsigned int addr, const Word &data, MemoryAccessMode mode = WORD) {
-  if (addr >= MEMORY_SIZE) {
-    return; // must be an invalid address not to be committed
-  }
-  memory[addr] = to_unsigned(data.range<7, 0>());
-  if (mode == BYTE || mode == BYTE_UNSIGNED) {
-    return;
-  }
-  memory[addr + 1] = to_unsigned(data.range<15, 8>());
-  if (mode == HALF_WORD || mode == HALF_WORD_UNSIGNED) {
-    return;
-  }
-  memory[addr + 2] = to_unsigned(data.range<23, 16>());
-  memory[addr + 3] = to_unsigned(data.range<31, 24>());
-}
+#include "instructions.hpp"
+using namespace instructions;
 
 struct ProcessorInput {
   void sync() {
@@ -108,236 +26,6 @@ struct RegisterFile {
   Flag pending; // for register 0, data is always 0 and pending is always false.
 };
 
-enum Op {
-  LUI,
-  AUIPC,
-  JAL,
-  JALR,
-  BEQ,
-  BNE,
-  BLT,
-  BGE,
-  BLTU,
-  BGEU,
-  LB,
-  LH,
-  LW,
-  LBU,
-  LHU,
-  SB,
-  SH,
-  SW,
-  ADDI,
-  SLTI,
-  SLTIU,
-  XORI,
-  ORI,
-  ANDI,
-  SLLI,
-  SRLI,
-  SRAI,
-  ADD,
-  SUB,
-  SLL,
-  SLT,
-  SLTU,
-  XOR,
-  SRL,
-  SRA,
-  OR,
-  AND,
-  UNKNOWN // for invalid instructions
-};
-
-Op decode(Word word) {
-  auto opcode = to_unsigned(word.range<6, 0>());
-  auto funct3 = to_unsigned(word.range<14, 12>());
-  auto funct7 = to_unsigned(word.range<31, 25>());
-  switch (opcode) {
-    case 0b0110111:
-      return LUI;
-    case 0b0010111:
-      return AUIPC;
-    case 0b1101111:
-      return JAL;
-    case 0b1100111:
-      return JALR;
-    case 0b1100011:
-      switch (funct3) {
-        case 0b000:
-          return BEQ;
-        case 0b001:
-          return BNE;
-        case 0b100:
-          return BLT;
-        case 0b101:
-          return BGE;
-        case 0b110:
-          return BLTU;
-        case 0b111:
-          return BGEU;
-        default:
-          return UNKNOWN;
-      }
-    case 0b0000011:
-      switch (funct3) {
-        case 0b000:
-          return LB;
-        case 0b001:
-          return LH;
-        case 0b010:
-          return LW;
-        case 0b100:
-          return LBU;
-        case 0b101:
-          return LHU;
-        default:
-          return UNKNOWN;
-      }
-    case 0b0100011:
-      switch (funct3) {
-        case 0b000:
-          return SB;
-        case 0b001:
-          return SH;
-        case 0b010:
-          return SW;
-        default:
-          return UNKNOWN;
-      }
-    case 0b0010011:
-      switch (funct3) {
-        case 0b000:
-          return ADDI;
-        case 0b010:
-          return SLTI;
-        case 0b011:
-          return SLTIU;
-        case 0b100:
-          return XORI;
-        case 0b110:
-          return ORI;
-        case 0b111:
-          return ANDI;
-        case 0b001:
-          return funct7 == 0b0000000 ? SLLI : UNKNOWN;
-        case 0b101:
-          return funct7 == 0b0000000 ? SRLI : funct7 == 0b0100000 ? SRAI : UNKNOWN;
-        default:
-          return UNKNOWN;
-      }
-    case 0b0110011:
-      switch (funct3) {
-        case 0b000:
-          return funct7 == 0b0000000 ? ADD : funct7 == 0b0100000 ? SUB : UNKNOWN;
-        case 0b001:
-          return funct7 == 0b0000000 ? SLL : UNKNOWN;
-        case 0b010:
-          return funct7 == 0b0000000 ? SLT : UNKNOWN;
-        case 0b011:
-          return funct7 == 0b0000000 ? SLTU : UNKNOWN;
-        case 0b100:
-          return funct7 == 0b0000000 ? XOR : UNKNOWN;
-        case 0b101:
-          return funct7 == 0b0000000 ? SRL : funct7 == 0b0100000 ? SRA : UNKNOWN;
-        case 0b110:
-          return funct7 == 0b0000000 ? OR : UNKNOWN;
-        case 0b111:
-          return funct7 == 0b0000000 ? AND : UNKNOWN;
-        default:
-          return UNKNOWN;
-      }
-    default:
-      return UNKNOWN;
-  }
-}
-
-constexpr Word NO_OPERATION = 0b0010011; // ADDI x0, x0, 0
-
-enum OpType {
-  R,
-  I1,
-  I2,
-  S,
-  B,
-  U,
-  J
-};
-
-OpType op_type_table[OPCODE_COUNT];
-
-void init() {
-  op_type_table[LUI] = U;
-  op_type_table[AUIPC] = U;
-  op_type_table[JAL] = J;
-  op_type_table[JALR] = I1;
-  op_type_table[BEQ] = B;
-  op_type_table[BNE] = B;
-  op_type_table[BLT] = B;
-  op_type_table[BGE] = B;
-  op_type_table[BLTU] = B;
-  op_type_table[BGEU] = B;
-  op_type_table[LB] = I1;
-  op_type_table[LH] = I1;
-  op_type_table[LW] = I1;
-  op_type_table[LBU] = I1;
-  op_type_table[LHU] = I1;
-  op_type_table[SB] = S;
-  op_type_table[SH] = S;
-  op_type_table[SW] = S;
-  op_type_table[ADDI] = I1;
-  op_type_table[SLTI] = I1;
-  op_type_table[SLTIU] = I1;
-  op_type_table[XORI] = I1;
-  op_type_table[ORI] = I1;
-  op_type_table[ANDI] = I1;
-  op_type_table[SLLI] = I2;
-  op_type_table[SRLI] = I2;
-  op_type_table[SRAI] = I2;
-  op_type_table[ADD] = R;
-  op_type_table[SUB] = R;
-  op_type_table[SLL] = R;
-  op_type_table[SLT] = R;
-  op_type_table[SLTU] = R;
-  op_type_table[XOR] = R;
-  op_type_table[SRL] = R;
-  op_type_table[SRA] = R;
-  op_type_table[OR] = R;
-  op_type_table[AND] = R;
-}
-
-bool is_branch(Op op) {
-  return op == BEQ || op == BNE || op == BLT || op == BGE || op == BLTU || op == BGEU;
-}
-
-bool is_store(Op op) {
-  return op == SB || op == SH || op == SW;
-}
-
-bool is_load(Op op) {
-  return op == LB || op == LH || op == LW || op == LBU || op == LHU;
-}
-
-MemoryAccessMode get_memory_access_mode(Op op) {
-  switch (op) {
-    case LB:
-    case SB:
-      return BYTE;
-    case LH:
-    case SH:
-      return HALF_WORD;
-    case LW:
-    case SW:
-      return WORD;
-    case LBU:
-      return BYTE_UNSIGNED;
-    case LHU:
-      return HALF_WORD_UNSIGNED;
-    default:
-      throw;
-  }
-}
-
 struct PendingData {
   Data data;
   Flag pending; // when pending is true, data stores the position of the pending instruction
@@ -348,7 +36,7 @@ struct Instruction {
   Flag ready;
   Opcode opcode;
   std::array<PendingData, 2> pending_data;
-  Data immediate; // we always store immediate as signed integer
+  Data immediate; // we always store immediate as signed integer. TODO: consider that in execute()
   RegPos destination;
   Data result; // for branch, result stores whether to jump
   Flag predict; // whether to jump when not ready
@@ -358,16 +46,16 @@ struct Instruction {
 
 struct ProcessorData {
   Data pc;
-  std::array<RegisterFile, REGISTER_NUM> register_files;
+  std::array<RegisterFile, REGISTER_COUNT> register_files;
   std::array<Instruction, INSTRUCTION_BUFFER_SIZE> instruction_buffer;
   InstPos head, tail;
   Flag flushing;
   Flag committing;
 };
 
-// TODO: split out IQ, RS, RoB, SLB, etc. as separate modules and pass data between them through wires
+// TODO: split out PC, IQ, RS, RoB, SLB, Reg, etc. as separate modules and pass data between them through wires
 // TODO: add more modules, e.g. ALU, memory, cache, rather than executing inlined in the processor module
-// above may reduce clock cycle and make the simulator more realistic
+// above may improve clock frequency and make the simulator more realistic
 
 struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, ProcessorData> {
 
@@ -403,8 +91,8 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
   // Predict and update pc
   void fetch(unsigned int inst_pos) {
     Instruction &inst = instruction_buffer[inst_pos];
-    Word code = read_data(to_unsigned(pc));
-    Op op = decode(code);
+    Word code = memory::read_data(to_unsigned(pc));
+    OpName op = decode(code);
     if (op == UNKNOWN) {
       code = NO_OPERATION;
       op = ADDI;
@@ -412,7 +100,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     inst.ready.assign(false);
     inst.opcode.assign(op);
     int imm = 0;
-    switch (op_type_table[op]) {
+    switch (get_op_type(op)) {
       case R:
         fill_pending_data(inst, 0, to_unsigned(code.range<19, 15>()));
         fill_pending_data(inst, 1, to_unsigned(code.range<24, 20>()));
@@ -476,7 +164,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     for (unsigned int i = 0; i < INSTRUCTION_BUFFER_SIZE; i++) {
       instruction_buffer[i].valid.assign(false);
     }
-    for (unsigned int i = 1; i < REGISTER_NUM; i++) {
+    for (unsigned int i = 1; i < REGISTER_COUNT; i++) {
       register_files[i].pending.assign(false);
     }
     flushing.assign(false);
@@ -489,7 +177,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
   // return true if flush is needed
   void commit(unsigned int inst_pos) {
     Instruction &inst = instruction_buffer[inst_pos];
-    Op op = static_cast<Op>(to_unsigned(inst.opcode));
+    auto op = static_cast<OpName>(to_unsigned(inst.opcode));
     if (is_branch(op)) {
       if (inst.result != inst.predict) {
         pc.assign(inst.pc + (inst.result ? to_signed(inst.immediate) : 4));
@@ -540,7 +228,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
       if (instruction_buffer[inst_pos].valid == false) {
         throw; // should not happen
       }
-      if (is_store(static_cast<Op>(to_unsigned(instruction_buffer[inst_pos].opcode)))) {
+      if (is_store(static_cast<OpName>(to_unsigned(instruction_buffer[inst_pos].opcode)))) {
         return true;
       }
     }
@@ -558,7 +246,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     if (inst.pending_data[0].pending == true || inst.pending_data[1].pending == true) {
       return;
     }
-    Op op = static_cast<Op>(to_unsigned(inst.opcode));
+    auto op = static_cast<OpName>(to_unsigned(inst.opcode));
     if (is_load(op) && has_uncommitted_store(inst_pos)) {
       return;
     }
@@ -669,8 +357,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     }
   }
 
-  void work()
-  override {
+  void work() override {
     if (flushing == true) {
       flush();
       return;
