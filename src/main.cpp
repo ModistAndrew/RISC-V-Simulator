@@ -3,7 +3,7 @@
 #include "template/cpu.h"
 
 int main() {
-  freopen("../testcases/magic.data", "r", stdin);
+//  freopen("../testcases/magic.data", "r", stdin);
   memory::load_instructions();
   dark::CPU cpu;
   ProcessorModule processor;
