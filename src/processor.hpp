@@ -12,17 +12,19 @@ using namespace instructions;
 
 struct ProcessorInput {
   FlagWire memory_busy;
-  FlagWire memory_ready;
+  FlagWire memory_load_finished;
+  FlagWire memory_store_finished;
   DataWire memory_data;
 };
 
 struct ProcessorOutput {
   Flag should_return;
   Return return_value;
-  Flag load; // whether load instruction is ready
-  InstPos load_inst_pos; // the position of the load instruction
-  Data load_addr; // the address of the load instruction
-  MemoryAccessModeCode load_mode; // the mode of the load instruction
+  Flag load;
+  Flag store;
+  Data addr;
+  MemoryAccessModeCode memory_mode; // the mode of the load instruction
+  Data store_data;
   Flag flushing;
 };
 
@@ -64,6 +66,7 @@ struct ProcessorData {
   std::array<PredictorStatusCode, PREDICTOR_HASH_SIZE> predictors;
   InstPos head, tail;
   Data flush_pc; // pc to flush to
+  InstPos mem_inst_pos; // the position of the load instruction
 };
 
 // TODO: split out PC, IQ, RS, RoB, SLB, Reg, etc. as separate modules and pass data between them through wires
@@ -137,7 +140,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
     if (inst.valid == true) {
       return;
     }
-    Word code = memory::read_data(to_unsigned(pc));
+    Word code = memory::load_data(to_unsigned(pc));
     Op op = decode(code);
     if (op == UNKNOWN) {
       code = NO_OPERATION;
@@ -218,6 +221,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
       register_files[i].pending.assign(false);
     }
     load.assign(false);
+    store.assign(false);
     flushing.assign(false);
   }
 
@@ -244,8 +248,14 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
         correct_predict++;
       }
     } else if (is_store(op)) {
-      store_data(to_unsigned(inst.pending_data[0].data + inst.immediate), inst.pending_data[1].data,
-                 get_memory_access_mode(op));
+      if (memory_busy == false) {
+        store.assign(true);
+        addr.assign(to_unsigned(inst.pending_data[0].data + inst.immediate));
+        store_data.assign(inst.pending_data[1].data);
+        memory_mode.assign(get_memory_access_mode(op));
+        mem_inst_pos.assign(inst_pos);
+      }
+      return;
     } else {
       auto reg_pos = to_unsigned(inst.destination);
       if (reg_pos) {
@@ -291,7 +301,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
   }
 
   void execute_load() {
-    if (load == true) {
+    if (memory_busy) {
       return;
     }
     auto current_inst_pos = to_unsigned(head);
@@ -306,10 +316,10 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
             inst.pending_data[0].pending == false && inst.pending_data[1].pending == false) {
           auto rs1 = to_signed(inst.pending_data[0].data);
           auto imm = to_signed(inst.immediate);
-          load_inst_pos.assign(current_inst_pos);
+          mem_inst_pos.assign(current_inst_pos);
           load.assign(true);
-          load_addr.assign(rs1 + imm);
-          load_mode.assign(get_memory_access_mode(op));
+          addr.assign(rs1 + imm);
+          memory_mode.assign(get_memory_access_mode(op));
           return;
         }
         current_inst_pos++;
@@ -441,11 +451,17 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
       flush();
       return;
     }
-    if (memory_ready) {
-      Instruction &load_inst = instruction_buffer[to_unsigned(load_inst_pos)];
+    if (memory_load_finished) {
+      Instruction &load_inst = instruction_buffer[to_unsigned(mem_inst_pos)];
       load_inst.result.assign(memory_data);
       load_inst.ready.assign(true);
       load.assign(false);
+    }
+    if (memory_store_finished) {
+      Instruction &store_inst = instruction_buffer[to_unsigned(mem_inst_pos)];
+      head.assign(head + 1);
+      store_inst.valid.assign(false);
+      store.assign(false);
     }
     unsigned int dest = -1;
     fetch(dest);

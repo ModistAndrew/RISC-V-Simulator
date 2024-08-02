@@ -34,7 +34,7 @@ namespace memory {
     WORD
   };
 
-  Word read_data(unsigned int addr, MemoryAccessMode mode = WORD) {
+  Word load_data(unsigned int addr, MemoryAccessMode mode = WORD) {
     if (mode == BYTE || mode == BYTE_UNSIGNED) {
       Byte ret;
       ret.set<7, 0>(memory[addr]);
@@ -71,6 +71,8 @@ namespace memory {
 struct MemoryInput {
   DataWire addr;
   FlagWire load;
+  FlagWire store;
+  DataWire store_data;
   MemoryAccessModeWire mode;
   FlagWire flushing;
 };
@@ -86,14 +88,24 @@ struct Memory : public dark::Module<MemoryInput, MemoryOutput> {
       phase.assign(0);
       return;
     }
-    if (phase > 0) {
+    if (to_signed(phase) > 0) {
       phase.assign(phase - 1);
     }
-    if (phase == 2) {
-      data_out.assign(memory::read_data(to_unsigned(addr), static_cast<memory::MemoryAccessMode>(to_unsigned(mode))));
+    if (to_signed(phase) < 0) {
+      phase.assign(phase + 1);
     }
-    if (phase == 0 && load) {
-      phase.assign(5);
+    if (phase == 2) {
+      data_out.assign(memory::load_data(to_unsigned(addr), static_cast<memory::MemoryAccessMode>(to_unsigned(mode))));
+    }
+    if (phase == -2) {
+      memory::store_data(to_unsigned(addr), store_data, static_cast<memory::MemoryAccessMode>(to_unsigned(mode)));
+    }
+    if (phase == 0) {
+      if (store) {
+        phase.assign(-5);
+      } else if (load) {
+        phase.assign(5);
+      }
     }
   }
 };
