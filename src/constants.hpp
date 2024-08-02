@@ -15,6 +15,7 @@ using Opcode = Register<7>;
 using Data = Register<32>; // data or memory address
 using DataWire = Wire<32>;
 using RegPos = Register<5>;
+using RegPosWire = Wire<5>;
 using Flag = Register<1>;
 using FlagWire = Wire<1>;
 using Return = Register<8>;

@@ -1,4 +1,9 @@
 #include "processor.hpp"
+#include "memory.hpp"
+#include "constants.hpp"
+#include "instructions.hpp"
+#include "program_counter.hpp"
+#include "register_unit.hpp"
 #include "template/cpu.h"
 
 int main() {

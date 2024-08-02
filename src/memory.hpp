@@ -67,4 +67,5 @@ namespace memory {
     memory[addr + 3] = to_unsigned(data.range<31, 24>());
   }
 }
+
 #endif //RISC_V_MEMORY_HPP

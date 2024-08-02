@@ -14,15 +14,14 @@ struct RegisterFile {
 };
 
 struct RegisterUnitInput {
-  InstPosWire fetch_inst;
-  InstPosWire commit_inst;
-  DataWire commit_data;
+  std::array<DataWire, INSTRUCTION_BUFFER_SIZE> instruction_buffer_result;
+  std::array<FlagWire, INSTRUCTION_BUFFER_SIZE> instruction_buffer_ready;
+  std::array<RegPosWire, 2> fetch_source_reg;
 };
 
 struct RegisterUnitOutput {
-  DataWire fetch_data;
-  InstPosWire fetch_pending_inst;
-  FlagWire fetch_pending;
+  std::array<PendingData, 2> fetch_source_pending;
+  std::array<DataWire, 2> fetch_source_data;
 };
 
 struct RegisterUnitData {
@@ -30,13 +29,22 @@ struct RegisterUnitData {
 };
 
 struct RegisterUnit : public dark::Module<RegisterUnitInput, RegisterUnitOutput, RegisterUnitData> {
-  void init_wire() {
-    fetch_data = [&]() -> auto & { return register_files[to_unsigned(fetch_inst)].data; };
-    fetch_pending_inst = [&]() -> auto & { return register_files[to_unsigned(fetch_inst)].pending_inst; };
-    fetch_pending = [&]() -> auto & { return register_files[to_unsigned(fetch_inst)].pending; };
-  }
-
   void work() override {
+    for (int i = 0; i < 2; i++) {
+      if (register_files[to_unsigned(fetch_source_reg[i])].pending == false) {
+        fetch_source_output[i].pending.assign(false);
+        fetch_source_output[i].data.assign(register_files[to_unsigned(fetch_source_reg[i])].data);
+      } else {
+        auto pending_inst_pos = to_unsigned(register_files[to_unsigned(fetch_source_reg[i])].pending_inst);
+        if (instruction_buffer_ready[pending_inst_pos] == true) {
+          fetch_source_output[i].pending.assign(false);
+          fetch_source_output[i].data.assign(instruction_buffer_result[pending_inst_pos]);
+        } else {
+          fetch_source_output[i].pending.assign(true);
+          fetch_source_output[i].data.assign(pending_inst_pos);
+        }
+      }
+    }
   }
 };
 

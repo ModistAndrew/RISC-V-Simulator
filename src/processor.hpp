@@ -26,11 +26,6 @@ struct RegisterFile {
   Flag pending; // for register 0, data is always 0 and pending is always false.
 };
 
-struct PendingData {
-  Data data;
-  Flag pending; // when pending is true, data stores the position of the pending instruction
-};
-
 struct Instruction {
   Flag valid; // set in work()
   Flag ready;

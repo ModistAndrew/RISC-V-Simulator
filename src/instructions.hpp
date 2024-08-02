@@ -46,7 +46,6 @@ namespace instructions {
     SRA,
     OR,
     AND,
-    UNKNOWN // for invalid instructions
   };
 
   enum OpType {
@@ -90,7 +89,7 @@ namespace instructions {
           case 0b111:
             return BGEU;
           default:
-            return UNKNOWN;
+            return ADDI;
         }
       case 0b0000011:
         switch (funct3) {
@@ -105,7 +104,7 @@ namespace instructions {
           case 0b101:
             return LHU;
           default:
-            return UNKNOWN;
+            return ADDI;
         }
       case 0b0100011:
         switch (funct3) {
@@ -116,7 +115,7 @@ namespace instructions {
           case 0b010:
             return SW;
           default:
-            return UNKNOWN;
+            return ADDI;
         }
       case 0b0010011:
         switch (funct3) {
@@ -133,35 +132,35 @@ namespace instructions {
           case 0b111:
             return ANDI;
           case 0b001:
-            return funct7 == 0b0000000 ? SLLI : UNKNOWN;
+            return funct7 == 0b0000000 ? SLLI : ADDI;
           case 0b101:
-            return funct7 == 0b0000000 ? SRLI : funct7 == 0b0100000 ? SRAI : UNKNOWN;
+            return funct7 == 0b0000000 ? SRLI : funct7 == 0b0100000 ? SRAI : ADDI;
           default:
-            return UNKNOWN;
+            return ADDI;
         }
       case 0b0110011:
         switch (funct3) {
           case 0b000:
-            return funct7 == 0b0000000 ? ADD : funct7 == 0b0100000 ? SUB : UNKNOWN;
+            return funct7 == 0b0000000 ? ADD : funct7 == 0b0100000 ? SUB : ADDI;
           case 0b001:
-            return funct7 == 0b0000000 ? SLL : UNKNOWN;
+            return funct7 == 0b0000000 ? SLL : ADDI;
           case 0b010:
-            return funct7 == 0b0000000 ? SLT : UNKNOWN;
+            return funct7 == 0b0000000 ? SLT : ADDI;
           case 0b011:
-            return funct7 == 0b0000000 ? SLTU : UNKNOWN;
+            return funct7 == 0b0000000 ? SLTU : ADDI;
           case 0b100:
-            return funct7 == 0b0000000 ? XOR : UNKNOWN;
+            return funct7 == 0b0000000 ? XOR : ADDI;
           case 0b101:
-            return funct7 == 0b0000000 ? SRL : funct7 == 0b0100000 ? SRA : UNKNOWN;
+            return funct7 == 0b0000000 ? SRL : funct7 == 0b0100000 ? SRA : ADDI;
           case 0b110:
-            return funct7 == 0b0000000 ? OR : UNKNOWN;
+            return funct7 == 0b0000000 ? OR : ADDI;
           case 0b111:
-            return funct7 == 0b0000000 ? AND : UNKNOWN;
+            return funct7 == 0b0000000 ? AND : ADDI;
           default:
-            return UNKNOWN;
+            return ADDI;
         }
       default:
-        return UNKNOWN;
+        return ADDI;
     }
   }
 
