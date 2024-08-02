@@ -3,7 +3,7 @@
 #include "template/cpu.h"
 
 int main() {
-  freopen("../testcases/magic.data", "r", stdin);
+//  freopen("../testcases/magic.data", "r", stdin);
   memory::load_instructions();
   dark::CPU cpu;
   ProcessorModule processor;
@@ -13,7 +13,8 @@ int main() {
   memory.load = [&]() -> auto & { return processor.load; };
   memory.addr = [&]() -> auto & { return processor.load_addr; };
   memory.mode = [&]() -> auto & { return processor.load_mode; };
-  processor.memory_ready = [&]() -> auto & { return memory.ready; };
+  memory.flushing = [&]() -> auto & { return processor.flushing; };
+  processor.memory_ready = [&]() { return memory.phase == 1; };
   processor.memory_busy = [&]() { return memory.phase > 0; };
   processor.memory_data = [&]() -> auto & { return memory.data_out; };
   while (processor.should_return == false) {

@@ -23,6 +23,7 @@ struct ProcessorOutput {
   InstPos load_inst_pos; // the position of the load instruction
   Data load_addr; // the address of the load instruction
   MemoryAccessModeCode load_mode; // the mode of the load instruction
+  Flag flushing;
 };
 
 struct RegisterFile {
@@ -62,7 +63,6 @@ struct ProcessorData {
   std::array<Instruction, INSTRUCTION_BUFFER_SIZE> instruction_buffer;
   std::array<PredictorStatusCode, PREDICTOR_HASH_SIZE> predictors;
   InstPos head, tail;
-  Flag flushing;
   Data flush_pc; // pc to flush to
 };
 
@@ -291,7 +291,7 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
   }
 
   void execute_load() {
-    if (load == true || memory_busy == true) {
+    if (load == true) {
       return;
     }
     auto current_inst_pos = to_unsigned(head);
@@ -437,11 +437,11 @@ struct ProcessorModule : dark::Module<ProcessorInput, ProcessorOutput, Processor
   }
 
   void work() override {
-    if (flushing == true) {
+    if (flushing) {
       flush();
       return;
     }
-    if (memory_ready && load) {
+    if (memory_ready) {
       Instruction &load_inst = instruction_buffer[to_unsigned(load_inst_pos)];
       load_inst.result.assign(memory_data);
       load_inst.ready.assign(true);

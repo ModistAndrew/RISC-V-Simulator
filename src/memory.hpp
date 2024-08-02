@@ -72,26 +72,29 @@ struct MemoryInput {
   DataWire addr;
   FlagWire load;
   MemoryAccessModeWire mode;
+  FlagWire flushing;
 };
 
 struct MemoryOutput {
   Data data_out;
   Data phase; // need three phases to complete a memory access
-  Flag ready;
 };
 
 struct Memory : public dark::Module<MemoryInput, MemoryOutput> {
   void work() override {
+    if (flushing) {
+      phase.assign(0);
+      return;
+    }
     if (phase > 0) {
       phase.assign(phase - 1);
     }
-    if (phase == 1) {
+    if (phase == 2) {
       data_out.assign(memory::read_data(to_unsigned(addr), static_cast<memory::MemoryAccessMode>(to_unsigned(mode))));
     }
     if (phase == 0 && load) {
-      phase.assign(2);
+      phase.assign(5);
     }
-    ready.assign(phase == 1);
   }
 };
 
