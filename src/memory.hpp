@@ -68,4 +68,31 @@ namespace memory {
   }
 }
 
+struct MemoryInput {
+  DataWire addr;
+  FlagWire load;
+  MemoryAccessModeWire mode;
+};
+
+struct MemoryOutput {
+  Data data_out;
+  Data phase; // need three phases to complete a memory access
+  Flag ready;
+};
+
+struct Memory : public dark::Module<MemoryInput, MemoryOutput> {
+  void work() override {
+    if (phase > 0) {
+      phase.assign(phase - 1);
+    }
+    if (phase == 1) {
+      data_out.assign(memory::read_data(to_unsigned(addr), static_cast<memory::MemoryAccessMode>(to_unsigned(mode))));
+    }
+    if (phase == 0 && load) {
+      phase.assign(2);
+    }
+    ready.assign(phase == 1);
+  }
+};
+
 #endif //RISC_V_MEMORY_HPP

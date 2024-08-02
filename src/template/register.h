@@ -35,7 +35,9 @@ public:
 
 	template<concepts::bit_convertible<_Len> _Tp>
 	void assign(const _Tp &value) {
-		debug::assert(!this->_M_assigned, "Register is double assigned in this cycle.");
+		if(this->_M_assigned) {
+      throw;
+    }
 		this->_M_assigned = true;
 		this->_M_new = static_cast<max_size_t>(value);
 	}

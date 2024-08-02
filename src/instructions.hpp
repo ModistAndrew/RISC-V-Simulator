@@ -8,7 +8,7 @@
 #include "memory.hpp"
 
 namespace instructions {
-  enum OpName {
+  enum Op {
     LUI,
     AUIPC,
     JAL,
@@ -46,6 +46,7 @@ namespace instructions {
     SRA,
     OR,
     AND,
+    UNKNOWN // for invalid instructions
   };
 
   enum OpType {
@@ -61,7 +62,7 @@ namespace instructions {
   constexpr Word NO_OPERATION = 0b0010011; // ADDI x0, x0, 0
   constexpr Word TERMINATION = 0x0ff00513;
 
-  OpName decode(Word word) {
+  Op decode(Word word) {
     auto opcode = to_unsigned(word.range<6, 0>());
     auto funct3 = to_unsigned(word.range<14, 12>());
     auto funct7 = to_unsigned(word.range<31, 25>());
@@ -89,7 +90,7 @@ namespace instructions {
           case 0b111:
             return BGEU;
           default:
-            return ADDI;
+            return UNKNOWN;
         }
       case 0b0000011:
         switch (funct3) {
@@ -104,7 +105,7 @@ namespace instructions {
           case 0b101:
             return LHU;
           default:
-            return ADDI;
+            return UNKNOWN;
         }
       case 0b0100011:
         switch (funct3) {
@@ -115,7 +116,7 @@ namespace instructions {
           case 0b010:
             return SW;
           default:
-            return ADDI;
+            return UNKNOWN;
         }
       case 0b0010011:
         switch (funct3) {
@@ -132,39 +133,39 @@ namespace instructions {
           case 0b111:
             return ANDI;
           case 0b001:
-            return funct7 == 0b0000000 ? SLLI : ADDI;
+            return funct7 == 0b0000000 ? SLLI : UNKNOWN;
           case 0b101:
-            return funct7 == 0b0000000 ? SRLI : funct7 == 0b0100000 ? SRAI : ADDI;
+            return funct7 == 0b0000000 ? SRLI : funct7 == 0b0100000 ? SRAI : UNKNOWN;
           default:
-            return ADDI;
+            return UNKNOWN;
         }
       case 0b0110011:
         switch (funct3) {
           case 0b000:
-            return funct7 == 0b0000000 ? ADD : funct7 == 0b0100000 ? SUB : ADDI;
+            return funct7 == 0b0000000 ? ADD : funct7 == 0b0100000 ? SUB : UNKNOWN;
           case 0b001:
-            return funct7 == 0b0000000 ? SLL : ADDI;
+            return funct7 == 0b0000000 ? SLL : UNKNOWN;
           case 0b010:
-            return funct7 == 0b0000000 ? SLT : ADDI;
+            return funct7 == 0b0000000 ? SLT : UNKNOWN;
           case 0b011:
-            return funct7 == 0b0000000 ? SLTU : ADDI;
+            return funct7 == 0b0000000 ? SLTU : UNKNOWN;
           case 0b100:
-            return funct7 == 0b0000000 ? XOR : ADDI;
+            return funct7 == 0b0000000 ? XOR : UNKNOWN;
           case 0b101:
-            return funct7 == 0b0000000 ? SRL : funct7 == 0b0100000 ? SRA : ADDI;
+            return funct7 == 0b0000000 ? SRL : funct7 == 0b0100000 ? SRA : UNKNOWN;
           case 0b110:
-            return funct7 == 0b0000000 ? OR : ADDI;
+            return funct7 == 0b0000000 ? OR : UNKNOWN;
           case 0b111:
-            return funct7 == 0b0000000 ? AND : ADDI;
+            return funct7 == 0b0000000 ? AND : UNKNOWN;
           default:
-            return ADDI;
+            return UNKNOWN;
         }
       default:
-        return ADDI;
+        return UNKNOWN;
     }
   }
 
-  OpType get_op_type(OpName op) {
+  OpType get_op_type(Op op) {
     switch (op) {
       case LUI:
       case AUIPC:
@@ -215,7 +216,7 @@ namespace instructions {
     }
   }
 
-  bool is_branch(OpName op) {
+  bool is_branch(Op op) {
     switch (op) {
       case BEQ:
       case BNE:
@@ -229,7 +230,7 @@ namespace instructions {
     }
   }
 
-  bool is_load(OpName op) {
+  bool is_load(Op op) {
     switch (op) {
       case LB:
       case LH:
@@ -242,7 +243,7 @@ namespace instructions {
     }
   }
 
-  bool is_store(OpName op) {
+  bool is_store(Op op) {
     switch (op) {
       case SB:
       case SH:
@@ -253,7 +254,7 @@ namespace instructions {
     }
   }
 
-  memory::MemoryAccessMode get_memory_access_mode(OpName op) {
+  memory::MemoryAccessMode get_memory_access_mode(Op op) {
     switch (op) {
       case LB:
       case SB:
